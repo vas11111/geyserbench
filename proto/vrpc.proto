@@ -1,0 +1,320 @@
+syntax = "proto3";
+package vrpc;
+
+// ============================================================
+// vRPC — Decoded Shredstream Service
+// ============================================================
+
+service Vrpc {
+  // Bidirectional streaming: client sends filter updates, server sends decoded transactions.
+  // Client sends initial SubscribeRequest on connect, can update filters mid-stream.
+  rpc SubscribeDecoded(stream SubscribeRequest) returns (stream SubscribeUpdate) {}
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum DexProgram {
+  DEX_PROGRAM_UNSPECIFIED = 0;
+  PUMP_FUN = 1;
+  PUMP_AMM = 2;
+  RAYDIUM_CPMM = 3;
+  RAYDIUM_LAUNCH_LAB = 4;
+  METEORA_DBC = 5;
+  METEORA_DAMM_V2 = 6;
+}
+
+// ============================================================
+// Request
+// ============================================================
+
+message SubscribeRequest {
+  // Named subscription filters. Key = client-chosen filter ID (e.g. "pf-buys").
+  // Sending a new map replaces all previous filters atomically.
+  // Empty map = no filtering (receive everything).
+  map<string, ProgramFilter> subscriptions = 1;
+
+  // Optional ping for keepalive
+  optional int32 ping_id = 2;
+}
+
+message ProgramFilter {
+  // Which programs to include. Empty = all programs.
+  repeated DexProgram programs = 1;
+
+  // Optional: only include these instruction types (e.g. "buy", "sell", "swap").
+  // Empty = all instruction types for the selected programs.
+  repeated string instruction_types = 2;
+}
+
+// ============================================================
+// Response
+// ============================================================
+
+message SubscribeUpdate {
+  oneof update {
+    DecodedTransaction transaction = 1;
+    int32 pong = 2;
+    SlotNotification slot = 3;
+  }
+}
+
+message SlotNotification {
+  uint64 slot = 1;
+}
+
+// ============================================================
+// Decoded Transaction
+// ============================================================
+
+message DecodedTransaction {
+  // Slot this transaction appeared in
+  uint64 slot = 1;
+
+  // Transaction signature (first signature, 64 bytes)
+  bytes signature = 2;
+
+  // Transaction index within the entry batch
+  uint32 tx_index = 3;
+
+  // Fee payer / signer pubkey (32 bytes)
+  bytes signer = 4;
+
+  // All static account keys from the transaction (32 bytes each).
+  // For v0 txns, LUT-resolved addresses are NOT included in v1.
+  repeated bytes account_keys = 5;
+
+  // Decoded instructions that matched target programs.
+  // A single transaction can have multiple matches (e.g. multi-hop swap).
+  repeated DecodedInstruction decoded_instructions = 6;
+
+  // Whether this is a v0 transaction with address lookup tables.
+  // When true, account_keys may be incomplete (LUT resolution deferred).
+  bool uses_lookup_tables = 7;
+
+  // Which subscription filter IDs matched this transaction
+  repeated string matched_filters = 8;
+}
+
+// ============================================================
+// Decoded Instruction
+// ============================================================
+
+message DecodedInstruction {
+  // Which program this instruction belongs to
+  DexProgram program = 1;
+
+  // Human-readable instruction name (e.g. "buy", "swap", "create_pool")
+  string instruction_name = 2;
+
+  // Index of this instruction in the transaction's instruction list
+  uint32 instruction_index = 3;
+
+  // Account indices into DecodedTransaction.account_keys
+  repeated uint32 account_indices = 4;
+
+  // Raw instruction data (discriminator + args) for forward-compat
+  bytes raw_data = 5;
+
+  // Decoded instruction variant
+  oneof decoded {
+    // === PumpFun ===
+    PumpFunCreate pump_fun_create = 10;
+    PumpFunBuy pump_fun_buy = 11;
+    PumpFunSell pump_fun_sell = 12;
+
+    // === Pump AMM (PumpSwap) ===
+    PumpAmmBuy pump_amm_buy = 20;
+    PumpAmmSell pump_amm_sell = 21;
+    PumpAmmCreatePool pump_amm_create_pool = 22;
+    PumpAmmDeposit pump_amm_deposit = 23;
+    PumpAmmWithdraw pump_amm_withdraw = 24;
+
+    // === Raydium CPMM ===
+    CpmmSwapBaseInput cpmm_swap_base_input = 30;
+    CpmmSwapBaseOutput cpmm_swap_base_output = 31;
+    CpmmCreatePool cpmm_create_pool = 32;
+
+    // === Raydium LaunchLab ===
+    LaunchLabCreatePool launch_lab_create = 40;
+    LaunchLabBuyExactIn launch_lab_buy_exact_in = 41;
+    LaunchLabBuyExactOut launch_lab_buy_exact_out = 42;
+    LaunchLabSellExactIn launch_lab_sell_exact_in = 43;
+    LaunchLabSellExactOut launch_lab_sell_exact_out = 44;
+    LaunchLabMigrate launch_lab_migrate = 45;
+
+    // === Meteora DBC ===
+    DbcSwap dbc_swap = 50;
+    DbcInitializeVirtualPool dbc_initialize = 51;
+    DbcMigrateToDammV2 dbc_migrate = 52;
+
+    // === Meteora DAMM v2 ===
+    DammV2Swap damm_v2_swap = 60;
+    DammV2CreatePool damm_v2_create_pool = 61;
+    DammV2AddLiquidity damm_v2_add_liquidity = 62;
+    DammV2RemoveLiquidity damm_v2_remove_liquidity = 63;
+  }
+}
+
+// ============================================================
+// PumpFun Instructions
+// Program: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
+// ============================================================
+
+message PumpFunCreate {
+  string name = 1;
+  string symbol = 2;
+  string uri = 3;
+}
+
+message PumpFunBuy {
+  uint64 amount = 1;
+  uint64 max_sol_cost = 2;
+}
+
+message PumpFunSell {
+  uint64 amount = 1;
+  uint64 min_sol_output = 2;
+}
+
+// ============================================================
+// Pump AMM (PumpSwap) Instructions
+// Program: pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA
+// ============================================================
+
+message PumpAmmBuy {
+  uint64 base_amount_out = 1;
+  uint64 max_quote_amount_in = 2;
+}
+
+message PumpAmmSell {
+  uint64 base_amount_in = 1;
+  uint64 min_quote_amount_out = 2;
+}
+
+message PumpAmmCreatePool {
+  uint32 index = 1;
+  uint64 base_amount = 2;
+  uint64 quote_amount = 3;
+}
+
+message PumpAmmDeposit {
+  uint64 lp_token_amount_out = 1;
+  uint64 max_base_amount_in = 2;
+  uint64 max_quote_amount_in = 3;
+}
+
+message PumpAmmWithdraw {
+  uint64 lp_token_amount_in = 1;
+  uint64 min_base_amount_out = 2;
+  uint64 min_quote_amount_out = 3;
+}
+
+// ============================================================
+// Raydium CPMM Instructions
+// Program: CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C
+// ============================================================
+
+message CpmmSwapBaseInput {
+  uint64 amount_in = 1;
+  uint64 minimum_amount_out = 2;
+}
+
+message CpmmSwapBaseOutput {
+  uint64 max_amount_in = 1;
+  uint64 amount_out = 2;
+}
+
+message CpmmCreatePool {
+  uint64 init_amount_0 = 1;
+  uint64 init_amount_1 = 2;
+  uint64 open_time = 3;
+}
+
+// ============================================================
+// Raydium LaunchLab Instructions
+// Program: LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj
+// ============================================================
+
+message LaunchLabCreatePool {
+  string name = 1;
+  string symbol = 2;
+  string uri = 3;
+  uint32 decimals = 4;
+  uint64 total_supply = 5;
+}
+
+message LaunchLabBuyExactIn {
+  uint64 amount_in = 1;
+  uint64 minimum_amount_out = 2;
+  uint64 share_fee_bps = 3;
+}
+
+message LaunchLabBuyExactOut {
+  uint64 amount_out = 1;
+  uint64 maximum_amount_in = 2;
+  uint64 share_fee_bps = 3;
+}
+
+message LaunchLabSellExactIn {
+  uint64 amount_in = 1;
+  uint64 minimum_amount_out = 2;
+  uint64 share_fee_bps = 3;
+}
+
+message LaunchLabSellExactOut {
+  uint64 amount_out = 1;
+  uint64 maximum_amount_in = 2;
+  uint64 share_fee_bps = 3;
+}
+
+message LaunchLabMigrate {
+  // Permissionless migration - no args
+}
+
+// ============================================================
+// Meteora DBC Instructions
+// Program: dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN
+// ============================================================
+
+message DbcSwap {
+  uint64 amount_in = 1;
+  uint64 minimum_amount_out = 2;
+}
+
+message DbcInitializeVirtualPool {
+  // Complex config params - include key fields
+  bytes pool_config = 1;
+}
+
+message DbcMigrateToDammV2 {
+  // Permissionless migration
+}
+
+// ============================================================
+// Meteora DAMM v2 Instructions
+// Program: cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG
+// ============================================================
+
+message DammV2Swap {
+  uint64 amount_in = 1;
+  uint64 minimum_amount_out = 2;
+}
+
+message DammV2CreatePool {
+  // Pool creation params
+  bytes config = 1;
+}
+
+message DammV2AddLiquidity {
+  uint64 max_token_a_amount = 1;
+  uint64 max_token_b_amount = 2;
+  uint64 min_lp_amount = 3;
+}
+
+message DammV2RemoveLiquidity {
+  uint64 lp_amount = 1;
+  uint64 min_token_a_amount = 2;
+  uint64 min_token_b_amount = 3;
+}

@@ -48,6 +48,7 @@ pub enum EndpointKind {
     Shredstream,
     Shreder,
     Jetstream,
+    Vrpc,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize)]
@@ -88,6 +89,7 @@ impl EndpointKind {
             EndpointKind::Shredstream => "shredstream",
             EndpointKind::Shreder => "shreder",
             EndpointKind::Jetstream => "jetstream",
+            EndpointKind::Vrpc => "vrpc",
         }
     }
 }

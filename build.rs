@@ -10,6 +10,7 @@ const PROTO_FILES: &[&str] = &[
     "proto/jetstream.proto",
     "proto/geyser.proto",
     "proto/solana-storage.proto",
+    "proto/vrpc.proto",
 ];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -18,3 +18,8 @@ pub mod solana {
         }
     }
 }
+
+#[allow(clippy::all, non_camel_case_types, non_snake_case)]
+pub mod vrpc {
+    include!(concat!(env!("OUT_DIR"), "/vrpc.rs"));
+}

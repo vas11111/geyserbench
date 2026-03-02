@@ -2,3 +2,5 @@ target/
 debug/
 **/*.rs.bk
 *.pdb
+config.toml
+.DS_Store
