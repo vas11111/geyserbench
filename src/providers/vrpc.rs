@@ -2,12 +2,12 @@ use futures::{SinkExt, channel::mpsc::unbounded};
 use futures_util::stream::StreamExt;
 use std::{collections::HashMap, error::Error, sync::atomic::Ordering};
 use tokio::task;
-use tracing::{Level, info, warn};
+use tracing::{Level, info};
 
 use crate::{
     config::{Config, Endpoint},
     proto::vrpc::{
-        DexProgram, ProgramFilter, SubscribeRequest,
+        ProgramFilter, SubscribeRequest,
         subscribe_update::Update,
         vrpc_client::VrpcClient,
     },
@@ -34,20 +34,6 @@ impl GeyserProvider for VrpcProvider {
     }
 }
 
-/// Maps a program address to its corresponding DexProgram enum variant.
-/// Returns None if the program is not supported by vRPC (has limitations).
-pub fn program_to_dex_program(program: &str) -> Option<DexProgram> {
-    match program {
-        "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" => Some(DexProgram::PumpFun),
-        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => Some(DexProgram::PumpAmm),
-        "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => Some(DexProgram::RaydiumCpmm),
-        "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj" => Some(DexProgram::RaydiumLaunchLab),
-        "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN" => Some(DexProgram::MeteoraDbc),
-        "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG" => Some(DexProgram::MeteoraDammV2),
-        _ => None,
-    }
-}
-
 async fn process_vrpc_endpoint(
     endpoint: Endpoint,
     config: Config,
@@ -70,23 +56,10 @@ async fn process_vrpc_endpoint(
     let signature_sender = signature_tx;
     let endpoint_name = endpoint.name.clone();
 
-    let dex_program = match program_to_dex_program(&config.account) {
-        Some(program) => program,
-        None => {
-            warn!(
-                endpoint = %endpoint_name,
-                account = %config.account,
-                "Program not supported by vRPC, skipping this provider"
-            );
-            return Ok(());
-        }
-    };
-
     info!(
         endpoint = %endpoint_name,
         account = %config.account,
-        dex_program = ?dex_program,
-        "Using vRPC with DexProgram filter"
+        "Using vRPC with account filter"
     );
 
     let mut log_file = if tracing::enabled!(Level::TRACE) {
@@ -106,10 +79,13 @@ async fn process_vrpc_endpoint(
 
     let mut subscriptions: HashMap<String, ProgramFilter> = HashMap::with_capacity(1);
     subscriptions.insert(
-        String::from("dex"),
+        String::from("account"),
         ProgramFilter {
-            programs: vec![dex_program as i32],
+            programs: vec![],
             instruction_types: vec![],
+            accounts_include: vec![config.account.clone()],
+            accounts_exclude: vec![],
+            accounts_required: vec![],
         },
     );
 

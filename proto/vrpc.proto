@@ -46,6 +46,18 @@ message ProgramFilter {
   // Optional: only include these instruction types (e.g. "buy", "sell", "swap").
   // Empty = all instruction types for the selected programs.
   repeated string instruction_types = 2;
+
+  // Optional: only include transactions where ANY of these accounts appear in account_keys.
+  // Each entry is a base58-encoded pubkey. Empty = no include filter.
+  repeated string accounts_include = 3;
+
+  // Optional: exclude transactions where ANY of these accounts appear in account_keys.
+  // Each entry is a base58-encoded pubkey. Empty = no exclude filter.
+  repeated string accounts_exclude = 4;
+
+  // Optional: only include transactions where ALL of these accounts appear in account_keys.
+  // Each entry is a base58-encoded pubkey. Empty = no required filter.
+  repeated string accounts_required = 5;
 }
 
 // ============================================================
